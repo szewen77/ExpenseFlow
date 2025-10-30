@@ -1,9 +1,10 @@
 import 'dart:async';
-import 'dart:io';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart' as sqflite;
+import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
 
 import '../models/budget.dart';
 import '../models/goal.dart';
@@ -42,28 +43,45 @@ class DatabaseService {
   }
 
   Future<sqflite.Database> _openDatabase() async {
-    final Directory docsDir = await getApplicationDocumentsDirectory();
-    final dbPath = p.join(docsDir.path, 'expenseflow.db');
+    if (kIsWeb) {
+      // For web, use sqflite_common_ffi_web
+      final databaseFactory = databaseFactoryFfiWeb;
+      final dbPath = 'expenseflow.db';
+      
+      return await databaseFactory.openDatabase(
+        dbPath,
+        options: sqflite.OpenDatabaseOptions(
+          version: _dbVersion,
+          onCreate: (db, _) async => _createSchema(db),
+          onUpgrade: (db, oldVersion, _) async =>
+              _upgradeSchema(db, oldVersion, _dbVersion),
+        ),
+      );
+    } else {
+      // For mobile/desktop platforms
+      final docsDir = await getApplicationDocumentsDirectory();
+      final dbPath = p.join(docsDir.path, 'expenseflow.db');
 
-    try {
-      return await sqflite.openDatabase(
-        dbPath,
-        version: _dbVersion,
-        onCreate: (db, _) async => _createSchema(db),
-        onUpgrade: (db, oldVersion, _) async =>
-            _upgradeSchema(db, oldVersion, _dbVersion),
-      );
-    } catch (e) {
-      // ignore: avoid_print
-      print('⚠️ Database open failed: $e');
-      await sqflite.deleteDatabase(dbPath);
-      return sqflite.openDatabase(
-        dbPath,
-        version: _dbVersion,
-        onCreate: (db, _) async => _createSchema(db),
-        onUpgrade: (db, oldVersion, _) async =>
-            _upgradeSchema(db, oldVersion, _dbVersion),
-      );
+      try {
+        return await sqflite.openDatabase(
+          dbPath,
+          version: _dbVersion,
+          onCreate: (db, _) async => _createSchema(db),
+          onUpgrade: (db, oldVersion, _) async =>
+              _upgradeSchema(db, oldVersion, _dbVersion),
+        );
+      } catch (e) {
+        // ignore: avoid_print
+        print('⚠️ Database open failed: $e');
+        await sqflite.deleteDatabase(dbPath);
+        return sqflite.openDatabase(
+          dbPath,
+          version: _dbVersion,
+          onCreate: (db, _) async => _createSchema(db),
+          onUpgrade: (db, oldVersion, _) async =>
+              _upgradeSchema(db, oldVersion, _dbVersion),
+        );
+      }
     }
   }
 
